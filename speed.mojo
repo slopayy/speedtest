@@ -1,6 +1,6 @@
 from std.sys import argv
 from std.sys.info import CompilationTarget
-from std.ffi import OwnedDLHandle, c_int
+from std.ffi import OwnedDLHandle, RTLD, c_int
 from std.memory import Pointer
 from std.time import perf_counter_ns
 from std.math import log
@@ -65,6 +65,24 @@ def read_cb(buf: Pointer[UInt64, MutAnyOrigin], size: Int, nmemb: Int, st: Point
     st.unsafe_offset(1)[] += UInt64(n)
     st.unsafe_offset(2)[] = UInt64(rem - n)
     return n
+
+
+def open_curl() raises -> OwnedDLHandle:
+    comptime if CompilationTarget.is_macos():
+        return OwnedDLHandle("/usr/lib/libcurl.4.dylib", RTLD.NOW)
+    var paths: List[String] = [
+        "libcurl.so.4",
+        "/usr/local/lib/libcurl.so.4",
+        "libcurl-gnutls.so.4",
+        "libcurl.so",
+        "/usr/local/lib/libcurl.so",
+    ]
+    for i in range(len(paths)):
+        try:
+            return OwnedDLHandle(paths[i], RTLD.NOW)
+        except:
+            pass
+    return OwnedDLHandle("libcurl.so.4", RTLD.NOW)
 
 
 def setopt[T: TrivialRegisterPassable](lib: OwnedDLHandle, easy: Int, opt: Int, val: T):
@@ -402,7 +420,7 @@ def main() raises:
         else:
             i += 1
 
-    var lib = OwnedDLHandle("/usr/lib/libcurl.4.dylib" if CompilationTarget.is_macos() else "libcurl.so.4")
+    var lib = open_curl()
     _ = lib.call["curl_global_init", c_int](3)
 
     var labels: List[String] = ["fastly     ", "cloudflare ", "google     ", "cloudfront ", "akamai     "]
